@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>破损二维码相似检索</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>破损二维码相似检索</h1>
+      <p>本地运行，只保存轻量索引；按已确定点位返回 Top 5 候选。</p>
+    </div>
+    <div class="status">
+      <span id="indexCount">有效索引：0</span>
+      <span id="runState">空闲</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel">
+      <h2>1. 导入清晰二维码索引</h2>
+      <label class="field">
+        <span>PDF、图片文件夹或 ZIP 路径</span>
+        <input id="galleryPath" type="text" placeholder="例如 D:\二维码资料、D:\二维码资料.zip 或 D:\二维码资料.pdf">
+      </label>
+      <button id="importBtn">开始导入 / 更新索引</button>
+      <div id="importInfo" class="hint">支持图片文件夹、ZIP 和 PDF。PDF 会自动裁剪每个二维码，并保存下方数字作为结果。</div>
+    </section>
+
+    <section class="panel">
+      <h2>2. 上传破损取证照片</h2>
+      <div class="uploadRow">
+        <input id="targetFile" type="file" accept="image/*">
+        <button id="clearCropBtn" type="button">清除框选</button>
+      </div>
+      <div class="canvasWrap">
+        <canvas id="photoCanvas"></canvas>
+      </div>
+      <div class="hint">在图片上拖动框选二维码区域。未框选时会使用整张图片匹配，准确率会下降。</div>
+      <button id="searchBtn">开始匹配</button>
+    </section>
+
+    <section class="panel resultsPanel">
+      <h2>3. 匹配结果</h2>
+      <div id="targetPreview" class="targetPreview"></div>
+      <div id="resultSummary" class="hint">暂无结果</div>
+      <div id="results" class="results"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

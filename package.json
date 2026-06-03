@@ -1,0 +1,13 @@
+{
+  "name": "qr-trace-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local web tool for damaged QR image matching.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "sharp": "^0.34.0"
+  }
+}
