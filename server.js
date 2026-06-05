@@ -140,6 +140,8 @@ async function ensureDirs() {
   await fsp.mkdir(PDF_ITEM_DIR, { recursive: true });
   await fsp.mkdir(IMPORT_JOB_DIR, { recursive: true });
   await fsp.mkdir(QR_SHARD_DIR, { recursive: true });
+  await fsp.appendFile(QR_CODES_FILE, "");
+  await fsp.appendFile(QR_SOURCE_FILE, "");
 }
 
 function sendJson(res, data, status = 200) {
@@ -364,6 +366,7 @@ async function restoreQrBinCheckpoint(sourceState) {
     await truncateQrBinRecords(sourceState.totalRecordsAfterCompleted);
   }
   if (Number.isSafeInteger(sourceState.codesSizeAfterCompleted)) {
+    await fsp.appendFile(QR_CODES_FILE, "");
     await fsp.truncate(QR_CODES_FILE, sourceState.codesSizeAfterCompleted);
   }
 }
@@ -552,13 +555,17 @@ async function readQrBinRecord(recordNo) {
 
 async function readQrCodeText(meta) {
   if (!meta || !meta.codeLength) return null;
-  const handle = await fsp.open(QR_CODES_FILE, "r");
+  let handle;
   try {
+    handle = await fsp.open(QR_CODES_FILE, "r");
     const buf = Buffer.alloc(meta.codeLength);
     await handle.read(buf, 0, meta.codeLength, meta.codeOffset);
     return buf.toString("utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
   } finally {
-    await handle.close();
+    if (handle) await handle.close();
   }
 }
 
