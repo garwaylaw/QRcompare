@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 cd /d "%~dp0"
 
 set "NODE_OPTIONS=--max-old-space-size=8192"
@@ -13,6 +14,14 @@ where node >nul 2>nul
 if errorlevel 1 (
   echo 未检测到 Node.js。
   echo 请先安装 Node.js 24 或较新的稳定版本，然后重新运行 start.bat。
+  pause
+  exit /b 1
+)
+
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo 未检测到 npm。
+  echo 请确认 Node.js 安装完整，并重新打开命令行或重新运行 start.bat。
   pause
   exit /b 1
 )

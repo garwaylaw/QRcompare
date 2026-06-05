@@ -608,7 +608,7 @@ async function renderPackedQrPng(packed, outputSize = 260) {
 }
 
 function getTotalIndexCount() {
-  return (qrBinManifest?.totalRecords || 0) + indexItems.length;
+  return getActiveQrBinRecordEstimate() + indexItems.length;
 }
 
 function isActiveQrBinSource(source) {
@@ -3118,6 +3118,13 @@ async function main() {
     } catch (err) {
       return sendJson(res, { error: err.message || String(err) }, 500);
     }
+  });
+  server.on("error", err => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`端口 ${PORT} 已被占用。请先关闭已经启动的 QRcompare 窗口，或在 start.bat 中设置其他 PORT 后重试。`);
+      process.exit(1);
+    }
+    throw err;
   });
   server.listen(PORT, () => {
     console.log(`本地二维码检索工具已启动：http://localhost:${PORT}`);

@@ -12,17 +12,24 @@
 
 运行前需要准备：
 
-- Node.js：建议 Node.js 24 或较新的稳定版本。
+- Node.js：要求 Node.js 20 或更高版本，建议使用 Node.js 24 或较新的稳定版本。
 - npm：随 Node.js 一起安装，用于执行 `npm install`。
 - Windows PowerShell：仅在导入 ZIP 文件时使用，程序会调用系统自带的 `Expand-Archive` 解压。只导入 PDF 或图片文件夹时不需要额外操作。
 
 项目的 npm 第三方依赖已经写在 `package.json` 中，首次运行前执行 `npm install` 会自动安装：
 
-- `sharp`：读取、裁剪、灰度化和渲染图片。
-- `pdfjs-dist`：读取和解析 PDF。
-- `@napi-rs/canvas`：给 `pdfjs-dist` 提供 PDF 页面渲染用的 Canvas 环境。
+- `sharp` `0.34.5`：读取、裁剪、灰度化和渲染图片。
+- `pdfjs-dist` `5.6.205`：读取和解析 PDF。
+- `@napi-rs/canvas` `0.1.100`：给 `pdfjs-dist` 提供 PDF 页面渲染用的 Canvas 环境。
 
 不需要额外安装 Python、ImageMagick、Poppler、7-Zip 或其他命令行工具。
+
+常见启动/导入问题：
+
+- 提示 `项目依赖尚未安装或不完整`：在项目目录执行 `npm install`。
+- 提示 `Cannot find module 'pdfjs-dist...'`、`Cannot find module 'sharp'` 或 `Cannot find module '@napi-rs/canvas'`：依赖没有安装完整，重新执行 `npm install`。
+- 提示端口 `8787` 被占用：关闭已经启动的 QRcompare 窗口，或在 `start.bat` 中增加一行 `set "PORT=8788"` 后重试。
+- ZIP 导入失败：确认是在 Windows 环境运行，并且系统 PowerShell 可用；也可以先手动解压 ZIP，再导入解压后的文件夹。
 
 ## 启动方式
 
