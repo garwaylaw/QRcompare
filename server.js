@@ -27,7 +27,13 @@ const QR_SOURCE_STATE_FILE = path.join(QR_INDEX_DIR, "sources.state.json");
 const QR_CODES_FILE = path.join(QR_INDEX_DIR, "codes.txt");
 const PUBLIC_DIR = path.join(ROOT, "public");
 const PORT = Number(process.env.PORT || 8787);
+const HOST = process.env.HOST || "127.0.0.1";
+const ENABLE_IMPORT = process.env.ENABLE_IMPORT !== "0";
 const LOAD_LEGACY_INDEX = process.env.LOAD_LEGACY_INDEX === "1";
+const SEARCH_CONCURRENCY = Math.max(1, Math.min(8, Number(process.env.SEARCH_CONCURRENCY || 1)));
+const SEARCH_TASK_TTL_MS = Math.max(1, Number(process.env.SEARCH_TASK_TTL_HOURS || 24)) * 60 * 60 * 1000;
+const UPLOAD_RETENTION_HOURS = Math.max(0, Number(process.env.UPLOAD_RETENTION_HOURS || 0));
+const UPLOAD_CLEANUP_MS = Math.max(5 * 60 * 1000, Number(process.env.UPLOAD_CLEANUP_MS || 60 * 60 * 1000));
 const PDF_IMPORT_PAGE_CONCURRENCY = Math.max(1, Math.min(8, Number(process.env.PDF_IMPORT_PAGE_CONCURRENCY || 1)));
 const QR_IMPORT_ITEM_CONCURRENCY_MIN = Math.max(1, Math.min(32, Number(process.env.QR_IMPORT_ITEM_CONCURRENCY_MIN || 2)));
 const QR_IMPORT_ITEM_CONCURRENCY_MAX = Math.max(QR_IMPORT_ITEM_CONCURRENCY_MIN, Math.min(64, Number(process.env.QR_IMPORT_ITEM_CONCURRENCY || 16)));
@@ -80,8 +86,11 @@ let importProgress = {
 };
 let pdfjsCache = null;
 const searchTasks = new Map();
+const searchQueue = [];
+let activeSearchCount = 0;
 let adaptiveQrImportConcurrency = Math.min(4, QR_IMPORT_ITEM_CONCURRENCY_MAX);
 let importMemoryMonitor = null;
+let uploadCleanupTimer = null;
 
 function storedPathToRuntime(value) {
   if (typeof value !== "string") return value;
@@ -144,6 +153,36 @@ async function ensureDirs() {
   await fsp.appendFile(QR_SOURCE_FILE, "");
 }
 
+async function cleanupOldUploads() {
+  if (UPLOAD_RETENTION_HOURS <= 0) return;
+  const cutoff = Date.now() - UPLOAD_RETENTION_HOURS * 60 * 60 * 1000;
+  let entries = [];
+  try {
+    entries = await fsp.readdir(UPLOAD_DIR, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === "ENOENT") return;
+    throw err;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const filePath = path.join(UPLOAD_DIR, entry.name);
+    try {
+      const stat = await fsp.stat(filePath);
+      if (stat.mtimeMs < cutoff) await fsp.unlink(filePath);
+    } catch (err) {
+      if (err.code !== "ENOENT") console.warn(`清理上传文件失败：${entry.name}：${err.message || err}`);
+    }
+  }
+}
+
+function startUploadCleanup() {
+  if (UPLOAD_RETENTION_HOURS <= 0 || uploadCleanupTimer) return;
+  cleanupOldUploads().catch(err => console.warn(`清理上传目录失败：${err.message || err}`));
+  uploadCleanupTimer = setInterval(() => {
+    cleanupOldUploads().catch(err => console.warn(`清理上传目录失败：${err.message || err}`));
+  }, UPLOAD_CLEANUP_MS);
+}
+
 function sendJson(res, data, status = 200) {
   const body = Buffer.from(JSON.stringify(data));
   res.writeHead(status, {
@@ -156,6 +195,13 @@ function sendJson(res, data, status = 200) {
 function sendText(res, text, status = 200) {
   res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8" });
   res.end(text);
+}
+
+function publicErrorMessage(err) {
+  if (process.env.DEBUG_ERRORS === "1") return err.message || String(err);
+  return String(err.message || err)
+    .replace(/[A-Za-z]:\\[^\s"'<>]+/g, "[server-path]")
+    .replace(new RegExp(ROOT.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&"), "gi"), "[project-root]");
 }
 
 function safeJoin(base, urlPath) {
@@ -2732,6 +2778,48 @@ function updateSearchTask(task, patch) {
   Object.assign(task, patch, { updatedAt: new Date().toISOString() });
 }
 
+function cleanupSearchTasks() {
+  const now = Date.now();
+  for (const [id, task] of searchTasks) {
+    if (task.status !== "done" && task.status !== "error") continue;
+    const updated = Date.parse(task.updatedAt || task.createdAt || 0);
+    if (Number.isFinite(updated) && now - updated > SEARCH_TASK_TTL_MS) searchTasks.delete(id);
+  }
+}
+
+function enqueueSearchTask(task, filePath, crop) {
+  searchQueue.push({ task, filePath, crop });
+  updateSearchTask(task, {
+    status: "queued",
+    message: `等待匹配，当前排队 ${searchQueue.length} 个任务`
+  });
+  processSearchQueue();
+}
+
+function processSearchQueue() {
+  cleanupSearchTasks();
+  while (activeSearchCount < SEARCH_CONCURRENCY && searchQueue.length > 0) {
+    const job = searchQueue.shift();
+    activeSearchCount += 1;
+    updateSearchTask(job.task, {
+      status: "running",
+      message: "正在准备匹配"
+    });
+    runSearchTask(job.task, job.filePath, job.crop)
+      .catch(err => {
+        updateSearchTask(job.task, {
+          status: "error",
+          error: publicErrorMessage(err),
+          message: "匹配失败"
+        });
+      })
+      .finally(() => {
+        activeSearchCount = Math.max(0, activeSearchCount - 1);
+        processSearchQueue();
+      });
+  }
+}
+
 function searchTaskPayload(task) {
   return {
     id: task.id,
@@ -2747,7 +2835,9 @@ function searchTaskPayload(task) {
     results: task.results,
     error: task.error,
     decoded: task.decoded,
-    previewId: task.previewId
+    previewId: task.previewId,
+    queueLength: searchQueue.length,
+    activeSearchCount
   };
 }
 
@@ -3002,7 +3092,7 @@ async function runSearchTask(task, filePath, crop) {
     updateSearchTask(task, {
       status: "error",
       message: "匹配失败",
-      error: err.message || String(err)
+      error: publicErrorMessage(err)
     });
   }
 }
@@ -3036,15 +3126,26 @@ async function handleApi(req, res) {
   if (req.method === "GET" && url.pathname === "/api/status") {
     return sendJson(res, {
       count: getTotalIndexCount(),
-      progress: importProgress
+      progress: importProgress,
+      config: {
+        enableImport: ENABLE_IMPORT,
+        searchConcurrency: SEARCH_CONCURRENCY,
+        host: HOST,
+        port: PORT
+      },
+      search: {
+        queued: searchQueue.length,
+        active: activeSearchCount
+      }
     });
   }
   if (req.method === "POST" && url.pathname === "/api/import") {
+    if (!ENABLE_IMPORT) return sendJson(res, { error: "服务器已关闭网页导入功能，请联系管理员更新索引。" }, 403);
     const body = await readJson(req);
     if (!body.path) return sendJson(res, { error: "请提供图库文件夹或 ZIP 路径" }, 400);
     importPath(body.path).catch(err => {
       importProgress.running = false;
-      importProgress.message = err.message;
+      importProgress.message = publicErrorMessage(err);
       importRunning = false;
     });
     return sendJson(res, { ok: true });
@@ -3054,7 +3155,7 @@ async function handleApi(req, res) {
     const parts = parseMultipart(body, req.headers["content-type"]);
     const { target, crop } = await saveUpload(parts);
     const task = createSearchTask();
-    runSearchTask(task, target, crop);
+    enqueueSearchTask(task, target, crop);
     return sendJson(res, { ok: true, taskId: task.id });
   }
   if (req.method === "GET" && url.pathname === "/api/search-status") {
@@ -3111,23 +3212,25 @@ async function main() {
     await loadManual21Index();
   }
   await writeState();
+  startUploadCleanup();
   const server = http.createServer(async (req, res) => {
     try {
       if (req.url.startsWith("/api/")) return await handleApi(req, res);
       return await serveStatic(req, res);
     } catch (err) {
-      return sendJson(res, { error: err.message || String(err) }, 500);
+      return sendJson(res, { error: publicErrorMessage(err) }, 500);
     }
   });
   server.on("error", err => {
     if (err.code === "EADDRINUSE") {
-      console.error(`端口 ${PORT} 已被占用。请先关闭已经启动的 QRcompare 窗口，或在 start.bat 中设置其他 PORT 后重试。`);
+      console.error(`Port ${PORT} is already in use. Close the existing QRcompare process or set another PORT in start.bat.`);
       process.exit(1);
     }
     throw err;
   });
-  server.listen(PORT, () => {
-    console.log(`本地二维码检索工具已启动：http://localhost:${PORT}`);
+  server.listen(PORT, HOST, () => {
+    const shownHost = HOST === "0.0.0.0" ? "server-ip" : HOST;
+    console.log(`QRcompare started: http://${shownHost}:${PORT}`);
   });
 }
 

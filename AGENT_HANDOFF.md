@@ -80,6 +80,28 @@ http://localhost:8787
 
 `start.bat` changes the working directory to the folder containing the batch file. The app is intended to resolve project data relative to the current project folder.
 
+## Company Server Mode
+
+For a shared company LAN deployment, use `start_server.bat` instead of `start.bat`.
+
+Server-mode defaults:
+
+- `HOST=0.0.0.0` so other computers on the LAN can access the server.
+- `ENABLE_IMPORT=0` so ordinary users cannot trigger server-side path imports from the web UI.
+- `SEARCH_CONCURRENCY=1` so only one full-index scan runs at a time; additional searches queue in memory.
+- `UPLOAD_RETENTION_HOURS=168` so uploaded target images and previews older than 7 days are removed from `data/uploads/`.
+- `PORT=8787`; change this in `start_server.bat` if the port is already occupied.
+
+Recommended deployment workflow:
+
+1. Run `npm install`.
+2. Use `start.bat` on the server machine to import/update indexes as an administrator.
+3. Stop `start.bat`.
+4. Start shared lookup with `start_server.bat`.
+5. Users access `http://server-ip:8787`.
+
+Only set `ENABLE_IMPORT=1` temporarily when an administrator needs to import through the browser. Set it back to `0` afterward.
+
 ## Path Portability
 
 The original development machine used absolute Windows paths. Those paths should not be relied on.

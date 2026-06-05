@@ -2,6 +2,7 @@ const indexCount = document.getElementById("indexCount");
 const runState = document.getElementById("runState");
 const importBtn = document.getElementById("importBtn");
 const importInfo = document.getElementById("importInfo");
+const importPanel = document.getElementById("importPanel");
 const galleryPath = document.getElementById("galleryPath");
 const targetFile = document.getElementById("targetFile");
 const clearCropBtn = document.getElementById("clearCropBtn");
@@ -25,6 +26,9 @@ async function refreshStatus() {
   const data = await res.json();
   indexCount.textContent = `有效索引：${data.count}`;
   runState.textContent = data.progress.running ? "导入中" : "空闲";
+  if (importPanel && data.config) {
+    importPanel.style.display = data.config.enableImport ? "" : "none";
+  }
 
   const fileText = data.progress.totalFiles
     ? `；文件 ${data.progress.currentFileIndex || 0}/${data.progress.totalFiles}`
