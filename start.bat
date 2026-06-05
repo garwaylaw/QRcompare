@@ -1,31 +1,36 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+
 set "NODE_OPTIONS=--max-old-space-size=8192"
 set "LOAD_LEGACY_INDEX=0"
 set "PDF_IMPORT_PAGE_CONCURRENCY=1"
 set "QR_IMPORT_ITEM_CONCURRENCY_MIN=2"
 set "QR_IMPORT_ITEM_CONCURRENCY=16"
 set "IMPORT_MEMORY_CHECK_MS=1500"
-set "RUNTIME_NODE_MODULES=C:\Users\HUAWEI\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules"
-set "RUNTIME_NODE=C:\Users\HUAWEI\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
 
 where node >nul 2>nul
-if %errorlevel%==0 (
-  set "NODE_CMD=node"
-) else (
-  set "NODE_CMD=%RUNTIME_NODE%"
+if errorlevel 1 (
+  echo 未检测到 Node.js。
+  echo 请先安装 Node.js 24 或较新的稳定版本，然后重新运行 start.bat。
+  pause
+  exit /b 1
 )
 
-if exist "%RUNTIME_NODE_MODULES%" (
-  set "NODE_PATH=%RUNTIME_NODE_MODULES%"
-  for /d %%D in ("%RUNTIME_NODE_MODULES%\.pnpm\sharp@*") do call set "NODE_PATH=%%NODE_PATH%%;%%D\node_modules"
-  for /d %%D in ("%RUNTIME_NODE_MODULES%\.pnpm\detect-libc@*") do call set "NODE_PATH=%%NODE_PATH%%;%%D\node_modules"
-  for /d %%D in ("%RUNTIME_NODE_MODULES%\.pnpm\semver@*") do call set "NODE_PATH=%%NODE_PATH%%;%%D\node_modules"
-  for /d %%D in ("%RUNTIME_NODE_MODULES%\.pnpm\pdfjs-dist@*") do call set "NODE_PATH=%%NODE_PATH%%;%%D\node_modules"
-  for /d %%D in ("%RUNTIME_NODE_MODULES%\.pnpm\@napi-rs+canvas@*") do call set "NODE_PATH=%%NODE_PATH%%;%%D\node_modules"
-  for /d %%D in ("%RUNTIME_NODE_MODULES%\.pnpm\@napi-rs+canvas-win32-x64-msvc@*") do call set "NODE_PATH=%%NODE_PATH%%;%%D\node_modules"
-)
+if not exist "%~dp0node_modules\sharp\package.json" goto missing_deps
+if not exist "%~dp0node_modules\pdfjs-dist\package.json" goto missing_deps
+if not exist "%~dp0node_modules\@napi-rs\canvas\package.json" goto missing_deps
 
-"%NODE_CMD%" "%~dp0server.js"
+node "%~dp0server.js"
 pause
+exit /b %errorlevel%
+
+:missing_deps
+echo 项目依赖尚未安装或不完整。
+echo.
+echo 请在当前项目目录执行：
+echo   npm install
+echo.
+echo 安装完成后再双击 start.bat 启动。
+pause
+exit /b 1
