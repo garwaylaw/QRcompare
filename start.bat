@@ -8,18 +8,32 @@ set "PDF_IMPORT_PAGE_CONCURRENCY=1"
 set "QR_IMPORT_ITEM_CONCURRENCY_MIN=2"
 set "QR_IMPORT_ITEM_CONCURRENCY=16"
 set "IMPORT_MEMORY_CHECK_MS=1500"
+set "NODE_CMD=node"
+set "NPM_CMD=npm"
 
-where node >nul 2>nul
-if errorlevel 1 goto missing_node
+%NODE_CMD% -v >nul 2>nul
+if errorlevel 1 (
+  if exist "C:\Program Files\nodejs\node.exe" (
+    set "NODE_CMD=C:\Program Files\nodejs\node.exe"
+  ) else (
+    goto missing_node
+  )
+)
 
-where npm >nul 2>nul
-if errorlevel 1 goto missing_npm
+%NPM_CMD% -v >nul 2>nul
+if errorlevel 1 (
+  if exist "C:\Program Files\nodejs\npm.cmd" (
+    set "NPM_CMD=C:\Program Files\nodejs\npm.cmd"
+  ) else (
+    goto missing_npm
+  )
+)
 
 if not exist "%~dp0node_modules\sharp\package.json" goto missing_deps
 if not exist "%~dp0node_modules\pdfjs-dist\package.json" goto missing_deps
 if not exist "%~dp0node_modules\@napi-rs\canvas\package.json" goto missing_deps
 
-node "%~dp0server.js"
+"%NODE_CMD%" "%~dp0server.js"
 pause
 exit /b %errorlevel%
 
@@ -39,7 +53,7 @@ exit /b 1
 echo Project dependencies are missing or incomplete.
 echo.
 echo Run this command in the project folder:
-echo   npm install
+echo   "%NPM_CMD%" install
 echo.
 echo After installation, run start.bat again.
 pause
