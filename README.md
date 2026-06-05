@@ -8,6 +8,22 @@
 
 这个文件不参与程序运行，也不是配置文件；删除它不会影响启动和匹配功能。但如果计划把项目交给别人继续开发，建议保留并同步更新它。
 
+## 运行环境和依赖
+
+运行前需要准备：
+
+- Node.js：建议 Node.js 24 或较新的稳定版本。
+- npm：随 Node.js 一起安装，用于执行 `npm install`。
+- Windows PowerShell：仅在导入 ZIP 文件时使用，程序会调用系统自带的 `Expand-Archive` 解压。只导入 PDF 或图片文件夹时不需要额外操作。
+
+项目的 npm 第三方依赖已经写在 `package.json` 中，首次运行前执行 `npm install` 会自动安装：
+
+- `sharp`：读取、裁剪、灰度化和渲染图片。
+- `pdfjs-dist`：读取和解析 PDF。
+- `@napi-rs/canvas`：给 `pdfjs-dist` 提供 PDF 页面渲染用的 Canvas 环境。
+
+不需要额外安装 Python、ImageMagick、Poppler、7-Zip 或其他命令行工具。
+
 ## 启动方式
 
 首次从 GitHub 下载项目后，需要先安装依赖：
