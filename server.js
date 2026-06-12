@@ -2860,19 +2860,13 @@ function uniqueManualGridFeatures(features) {
 }
 
 function manualTargetGridOptions() {
-  const base = {
+  return [{
     blackThreshold: 80,
     whiteThreshold: 245,
     grayUnknown: true,
     grayUnknownRatio: 0.04,
-    unknownExpand: 1
-  };
-  return [
-    base,
-    { ...base, gridFit: "full", marginRatio: 0.03, sampleInset: 0.2 },
-    { ...base, gridFit: "full", marginRatio: 0.02, sampleInset: 0.25 },
-    { ...base, sideScale: 0.995, offsetX: -2, sampleInset: 0.25 }
-  ];
+    unknownExpand: 0
+  }];
 }
 
 async function manualTargetGridFeatures(filePath, crop) {
@@ -2885,8 +2879,7 @@ async function manualTargetGridFeatures(filePath, crop) {
     }
   }
   const unique = uniqueManualGridFeatures(features);
-  const bestKnown = Math.max(0, ...unique.map(feature => feature.known || 0));
-  return unique.filter(feature => feature.known >= Math.max(35, bestKnown * 0.75));
+  return unique.slice(0, 1);
 }
 
 async function searchQrBinaryManual(task, manualFeatures) {
